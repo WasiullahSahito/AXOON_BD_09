@@ -11,7 +11,7 @@ class StripeController extends Controller
 {
     public function success(Request $request)
     {
-        Stripe::setApiKey(env('STRIPE_SECRET_KEY'));
+        Stripe::setApiKey(env('STRIPE_KEY'));
         $sessionId = $request->query('session_id');
 
         try {
