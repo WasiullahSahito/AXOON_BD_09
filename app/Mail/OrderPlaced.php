@@ -38,7 +38,7 @@ class OrderPlaced extends Mailable
     public function content(): Content
     {
         return new Content(
-            markdown: 'emails.orders.placed', // Use 'markdown' for a Markdown email, specify the path to your Blade template
+            markdown: 'emails.orders.place', // Use 'markdown' for a Markdown email, specify the path to your Blade template
             with: [
                 'order' => $this->order, // Pass the order object to the view
             ],
