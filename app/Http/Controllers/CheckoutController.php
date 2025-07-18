@@ -1,13 +1,19 @@
 <?php
 namespace App\Http\Controllers;
 
+use App\Mail\OrderPlaced; // This MUST be present
 use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\Payment;
 use App\Models\Product;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Mail; // This MUST be present
+// Removed: use Illuminate\Support\Facades\Auth; // Removed as per your request
 use Stripe\Checkout\Session;
 use Stripe\Stripe;
+
+use Illuminate\Support\Facades\Log;
+use Exception; // Import Exception for error handling
 
 class CheckoutController extends Controller
 {
@@ -21,6 +27,8 @@ class CheckoutController extends Controller
 
     public function placeOrder(Request $request)
     {
+        // Removed: if (!Auth::check()) { ... } block as per your request
+
         $request->validate([
             'first_name'     => 'required|string|max:255',
             'last_name'      => 'required|string|max:255',
@@ -45,11 +53,15 @@ class CheckoutController extends Controller
         }
 
         // Create the order
-        $order                 = new Order();
-        $order->user_id        = session('user_id'); // Assuming user is logged in
+        $order = new Order();
+        // === Reverted to session('user_id') as per your request ===
+        // IMPORTANT: Ensure session('user_id') is always set with a valid user ID,
+        // otherwise you will get a database error because 'user_id' is non-nullable.
+        $order->user_id = session('user_id');
+        // ==========================================================
         $order->total          = $total;
         $order->payment_method = $request->payment_method;
-        $order->status         = 'pending';
+        $order->status         = 'delivered'; // Set to 'delivered' as requested
         $order->first_name     = $request->first_name;
         $order->last_name      = $request->last_name;
         $order->email          = $request->email;
@@ -60,7 +72,7 @@ class CheckoutController extends Controller
         $order->state          = $request->state;
         $order->zip_code       = $request->zip_code;
         $order->country        = $request->country;
-        $order->save();
+        $order->save(); // Save the order first to get an ID
 
         foreach ($cart as $id => $details) {
             OrderItem::create([
@@ -77,11 +89,20 @@ class CheckoutController extends Controller
             }
         }
 
+        // === Email Sending Logic: This section sends the email after the order is saved ===
+        try {
+            Mail::to($order->email)->send(new OrderPlaced($order));
+        } catch (Exception $e) {
+            // Log any email sending errors, but don't stop the order process
+            Log::error('Error sending order confirmation email: ' . $e->getMessage());
+        }
+        // ===============================================================================
+
         if ($request->payment_method === 'cod') {
             session()->forget('cart');
             return redirect()->route('checkout.success')->with('success', 'Order placed successfully with Cash on Delivery!');
         } elseif ($request->payment_method === 'stripe') {
-            Stripe::setApiKey(env('STRIPE_KEY'));
+            Stripe::setApiKey(env('STRIPE_KEY')); // Ensure this is STRIPE_SECRET_KEY
 
             $line_items = [];
             foreach ($cart as $id => $details) {
@@ -111,7 +132,7 @@ class CheckoutController extends Controller
                     ],
                 ]);
 
-                // Store payment record as pending
+                // Store payment record as pending for Stripe. This status will be updated on webhook.
                 Payment::create([
                     'order_id'       => $order->id,
                     'payment_method' => 'stripe',
@@ -121,7 +142,7 @@ class CheckoutController extends Controller
 
                 return redirect()->away($checkoutSession->url);
 
-            } catch (\Exception $e) {
+            } catch (Exception $e) {
                                   // If Stripe checkout fails, revert the order and cart
                 $order->delete(); // Delete the created order
                 foreach ($cart as $id => $details) {
