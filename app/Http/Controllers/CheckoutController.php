@@ -81,7 +81,7 @@ class CheckoutController extends Controller
             session()->forget('cart');
             return redirect()->route('checkout.success')->with('success', 'Order placed successfully with Cash on Delivery!');
         } elseif ($request->payment_method === 'stripe') {
-            Stripe::setApiKey(env('STRIPE_SECRET'));
+            Stripe::setApiKey(env('STRIPE_KEY'));
 
             $line_items = [];
             foreach ($cart as $id => $details) {
